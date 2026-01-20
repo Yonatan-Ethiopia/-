@@ -8,6 +8,8 @@
     # pkgs.go
     pkgs.python314
     pkgs.uv
+    pkgs.sudo
+    pkgs.ffmpeg
     # pkgs.python311Packages.pip
     # pkgs.nodejs_20
     # pkgs.nodePackages.nodemon
