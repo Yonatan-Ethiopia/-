@@ -4,10 +4,26 @@ import subprocess
 import threading
 import queue
 import numpy as np
-from faster_whisper import WhisperModel
+import os
+import soundfile as sf
+import requests
+import json
 
 url = 'https://archive.org/details/shepherdwhostayed_2512.poem_librivox/shepherdwhostayed_garrison_bk_128kb.mp3'
 
+hasab = 'https://hasab.co/api/v1/upload-audio'
+HASAB_API = os.getenv('HASAB_API')
+headers = {
+    "Authorization": f"Bearer {HASAB_API}",
+}
+
+config = {
+    "transcribe": True,
+    "translate": False,
+    "summarize": False,
+    "language": "auto",
+    "timestamps": True
+}
 
 SAMPLE_RATE = 16000
 CHANNELS = 1
@@ -19,7 +35,7 @@ CHUNK_LIMIT = SAMPLE_RATE * BYTES_PER_SAMPLE * CHANNELS * CHUNK_SECONDS
 def get_stream_url(url):
     yt_output = {
         'format':'bestaudio/best',
-        'quite': True,
+        'quiet': True,
         'no_warnings': True,
     }
     with yt_dlp.YoutubeDL(yt_output) as ytdlp:
@@ -51,18 +67,32 @@ def ffmpeg_thread(process, q):
         except Exception as e:
             print(f"Error in ffmpeg thread: {e}")
 
-def asr_thread(q):
-    model = WhisperModel("tiny", device="cpu", compute_type="int8")
+def asr_thread(q):   
     while True:
         try:
             data = q.get()
             if data is None:
                 
                 continue
-            segment, info = model.transcribe(data, beam_size=1)
-            for segment in segments:
-                print(f"[{segment.start:.2f}s -> {segment.end:.2f}s] {segment.text}")
-        except KeyboardInterupt:
+            print("Data found..")
+            sf.write(
+                "chunk_01.wav",
+                data,
+                samplerate=16000,
+                subtype="PCM_16"
+            )
+            print(">WAV formed...")
+            files = {
+                "file": ("chunk_01.wav", open("chunk_01.wav", "rb"), "audio/wav"),
+                "config": (None, json.dumps(config))
+            }
+            response = requests.post(hasab, headers=headers, files=files)
+            print(response.status_code)
+            print(response.text)
+
+            ans = response.json()
+            print(ans['transcription'])
+        except KeyboardInterrupt:
             break
         except Exception as e:
             print(f"Error in asr thread: {e}")
@@ -91,4 +121,3 @@ thread_ffmpeg.start()
 thread_asr.start()
 thread_ffmpeg.join()
 thread_asr.join()
-
